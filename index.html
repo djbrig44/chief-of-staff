@@ -10,497 +10,269 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #05050a; font-family: 'DM Sans', sans-serif; -webkit-font-smoothing: antialiased; }
-    button { font-family: inherit; }
-    ::-webkit-scrollbar { height: 4px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #1a1a28; border-radius: 2px; }
+    *{box-sizing:border-box;margin:0;padding:0}body{background:#05050a;font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}button{font-family:inherit}::-webkit-scrollbar{height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#1a1a28;border-radius:2px}
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useMemo, useCallback } = React;
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useMemo,useCallback,useEffect}=React;
+const DEMO=false;
+function todayNoon(){const d=new Date();d.setHours(12,0,0,0);return d}
+const realToday=DEMO?new Date("2026-02-10T12:00:00"):todayNoon();
+function toLocalISO(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function addDays(d,n){const r=new Date(d);r.setHours(12,0,0,0);r.setDate(r.getDate()+n);r.setHours(12,0,0,0);return r}
+function noonDate(iso){return new Date(iso+"T12:00:00")}
+function shortDate(d){return d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}
+function load(k,fb){try{return JSON.parse(localStorage.getItem(k))??fb}catch{return fb}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
+function minsFromTimeStr(s){const[time,ampm]=s.trim().split(" ");let[h,m]=time.split(":").map(Number);const p=(ampm||"").toUpperCase();if(p==="PM"&&h!==12)h+=12;if(p==="AM"&&h===12)h=0;return h*60+(m||0)}
+function nowMins(){const d=new Date();return d.getHours()*60+d.getMinutes()}
 
-    // ── CONFIG ──
-    const DEMO = false;
-    const realToday = DEMO ? new Date("2026-02-10T12:00:00") : new Date();
+const MBA_CLASSES=[
+{date:"2026-02-12",day:"Thu",course:"Capstone",time:"5:30–7:30 PM",hours:2},
+{date:"2026-02-19",day:"Thu",course:"Capstone",time:"5:30–7:30 PM",hours:2},
+{date:"2026-02-23",day:"Mon",course:"AI in Marketing",time:"5:30–9:30 PM",hours:4},
+{date:"2026-02-26",day:"Thu",course:"Capstone",time:"5:30–7:30 PM",hours:2},
+{date:"2026-03-05",day:"Thu",course:"Capstone",time:"5:30–7:30 PM",hours:2},
+{date:"2026-03-09",day:"Mon",course:"AI in Marketing",time:"5:30–9:30 PM",hours:4},
+{date:"2026-03-11",day:"Wed",course:"Capstone (Final)",time:"5:30–7:30 PM",hours:2}];
 
-    // ── HELPERS ──
-    function toLocalISO(d) {
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    }
-    function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
-    function noonDate(iso) { return new Date(iso + "T12:00:00"); }
-    function shortDate(d) { return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); }
+function detectDayType(d){const iso=toLocalISO(d);const cls=MBA_CLASSES.find(c=>c.date===iso);if(cls){const isAI=cls.course.startsWith("AI");return{key:isAI?"ai":"capstone",classInfo:cls,events:[{label:cls.course,time:cls.time,icon:"🎓"}]}}const dow=d.getDay();if(dow===0)return{key:"sunday",classInfo:null,events:[]};if(dow===2)return{key:"tuesday",classInfo:null,events:[{label:"Therapy",time:"2:00 PM",icon:"🧠"}]};return{key:"normal",classInfo:null,events:[]}}
 
-    // ── MBA SCHEDULE ──
-    const MBA_CLASSES = [
-      { date: "2026-02-12", day: "Thu", course: "Capstone", time: "5:30–7:30 PM", hours: 2 },
-      { date: "2026-02-19", day: "Thu", course: "Capstone", time: "5:30–7:30 PM", hours: 2 },
-      { date: "2026-02-23", day: "Mon", course: "AI in Marketing", time: "5:30–9:30 PM", hours: 4 },
-      { date: "2026-02-26", day: "Thu", course: "Capstone", time: "5:30–7:30 PM", hours: 2 },
-      { date: "2026-03-05", day: "Thu", course: "Capstone", time: "5:30–7:30 PM", hours: 2 },
-      { date: "2026-03-09", day: "Mon", course: "AI in Marketing", time: "5:30–9:30 PM", hours: 4 },
-      { date: "2026-03-11", day: "Wed", course: "Capstone (Final)", time: "5:30–7:30 PM", hours: 2 },
-    ];
+function defaultExpanded(key){if(key==="ai")return new Set(["trading","class"]);if(key==="capstone")return new Set(["trading","class"]);if(key==="tuesday")return new Set(["trading","therapy"]);if(key==="sunday")return new Set(["trading","meal_prep"]);return new Set(["trading"])}
 
-    // ── DAY DETECTION ──
-    function detectDayType(d) {
-      const iso = toLocalISO(d);
-      const cls = MBA_CLASSES.find((c) => c.date === iso);
-      if (cls) {
-        const isAI = cls.course.startsWith("AI");
-        return { key: isAI ? "ai" : "capstone", classInfo: cls, events: [{ label: cls.course, time: cls.time, icon: "🎓" }] };
-      }
-      const dow = d.getDay();
-      if (dow === 0) return { key: "sunday", classInfo: null, events: [] };
-      if (dow === 2) return { key: "tuesday", classInfo: null, events: [{ label: "Therapy", time: "2:00 PM", icon: "🧠" }] };
-      return { key: "normal", classInfo: null, events: [] };
-    }
+const CORE=[
+{id:"morning",time:"6:00 AM",endTime:"6:30 AM",label:"Morning Startup",icon:"☀️",color:"#f59e0b",type:"ritual",duration:"30 min",details:["Coffee + breakfast","Pre-market brief","Trading plan + DEFAULT EXIT","Default: 10:15 AM"],meal:{time:"6:00 AM",label:"Breakfast"},adhd:"Breakfast is step 1."},
+{id:"trading",time:"6:30 AM",endTime:"10:15 AM",label:"Trading Block",icon:"📊",color:"#10b981",type:"focus",duration:"3h 45m",details:["Focus Mode: Trading","8:30 AM — protein snack at desk","Countdown at 9:45 AM","10:15 AM: leave the room"],meal:{time:"8:30 AM",label:"Protein Snack",reminder:"Protein now. You are trading — fuel the brain.",defaults:["Bar","Yogurt","Shake","Eggs"],rule:"At desk. Fuel, not a break."},adhd:"External cues + forced exit.",escalation:[{time:"9:45 AM",level:"Awareness",action:"30-min countdown",icon:"👁️"},{time:"10:05 AM",level:"Nudge",action:"'Exit in 10.'",icon:"🔔"},{time:"10:15 AM",level:"Force",action:"Leave room.",icon:"🚪"},{time:"10:20 AM",level:"Force",action:"Log override.",icon:"⚠️"}],override:{label:"Volatile Market Override",rules:["Declare by 10:05 AM","Max +90 min","Hard cap 11:00 AM","Max 2/week"]}},
+{id:"decompression",time:"10:15 AM",endTime:"11:00 AM",label:"Decompression (No Screens)",icon:"🚿",color:"#6366f1",type:"transition",duration:"45 min",details:["Leave trading room","Shower / walk / mobility","Shake or protein","Zero screens"],meal:{time:"10:30 AM",label:"Shake",rule:"Missed 8:30 → eat here. No compounding."},adhd:"Momentum kill switch."},
+{id:"meriwick_light",time:"11:00 AM",endTime:"11:45 AM",label:"Meriwick — Light Work",icon:"🎵",color:"#8b5cf680",type:"focus",duration:"45 min",details:["Emails, follow-ups, scheduling","Clear decks for deep work"],adhd:"Warmup only."},
+{id:"lunch",time:"11:45 AM",endTime:"12:15 PM",label:"Lunch",icon:"🍽️",color:"#f59e0b",type:"ritual",duration:"30 min",details:["Persistent alarm","In hands by 12:15 PM","Backup if not ready","Digest while eating"],meal:{time:"11:45 AM",label:"Lunch",reminder:"Lunch. Eat now before momentum steals it.",rule:"By 12:15 PM. No 'later.'"},adhd:"Before deep work."}];
 
-    function defaultExpanded(key) {
-      if (key === "ai") return new Set(["trading", "class"]);
-      if (key === "capstone") return new Set(["trading", "class"]);
-      if (key === "tuesday") return new Set(["trading", "therapy"]);
-      if (key === "sunday") return new Set(["trading", "meal_prep"]);
-      return new Set(["trading"]);
-    }
+const AFT_NORMAL=[
+{id:"meriwick_deep",time:"12:15 PM",endTime:"2:15 PM",label:"Meriwick — Deep Work",icon:"🎵",color:"#8b5cf6",type:"focus",duration:"2 hrs",details:["Meriwick Focus Mode","Nap window = quiet","SIA, reports, strategy"],adhd:"Best environment.",escalation:[{time:"2:00 PM",level:"Awareness",action:"15-min countdown",icon:"👁️"},{time:"2:15 PM",level:"Force",action:"'Gym now.'",icon:"🚪"}]},
+{id:"workout",time:"2:15 PM",endTime:"3:45 PM",label:"Workout + Recovery (60+30)",icon:"🏋️",color:"#6366f1",type:"transition",duration:"90 min",details:["Home gym","60-min workout","30-min shower + protein","Phone away"],meal:{time:"3:30 PM",label:"Post-Workout",defaults:["Shake","Bar","Eggs"]},adhd:"Physical transition + energy reset."},
+{id:"flex",time:"3:45 PM",endTime:"4:30 PM",label:"Flex Block",icon:"🔄",color:"#64748b",type:"flex",duration:"45 min",details:["Trading prep","Meriwick admin","MBA / S-Corp","Close loops only"],adhd:"Prevents evening work."},
+{id:"shutdown",time:"4:30 PM",endTime:"5:00 PM",label:"Shutdown Ritual",icon:"📋",color:"#6366f1",type:"transition",duration:"30 min",details:["Capture open loops","Tomorrow's top 3","DINNER DECISION","Execute by 5:00 PM"],meal:{time:"4:30 PM",label:"Dinner Decision",reminder:"Cooking or ordering? NOW.",rule:"By 5:00 PM."},adhd:"Forced decision."}];
 
-    // ── CORE MORNING ──
-    const CORE = [
-      {
-        id: "morning", time: "6:00 AM", endTime: "6:30 AM", label: "Morning Startup", icon: "☀️", color: "#f59e0b", type: "ritual", duration: "30 min",
-        details: ["Coffee + breakfast", "Pre-market brief", "Trading plan + DEFAULT EXIT", "Default: 10:15 AM"],
-        meal: { time: "6:00 AM", label: "Breakfast" },
-        adhd: "Breakfast is step 1.",
-      },
-      {
-        id: "trading", time: "6:30 AM", endTime: "10:15 AM", label: "Trading Block", icon: "📊", color: "#10b981", type: "focus", duration: "3h 45m",
-        details: ["Focus Mode: Trading", "8:30 AM — protein snack at desk", "Countdown at 9:45 AM", "10:15 AM: leave the room"],
-        meal: { time: "8:30 AM", label: "Protein Snack", reminder: "Protein now. You are trading — fuel the brain.", defaults: ["Bar", "Yogurt", "Shake", "Eggs"], rule: "At desk. Fuel, not a break." },
-        adhd: "External cues + forced exit.",
-        escalation: [
-          { time: "9:45 AM", level: "Awareness", action: "30-min countdown", icon: "👁️" },
-          { time: "10:05 AM", level: "Nudge", action: "'Exit in 10.'", icon: "🔔" },
-          { time: "10:15 AM", level: "Force", action: "Leave room.", icon: "🚪" },
-          { time: "10:20 AM", level: "Force", action: "Log override.", icon: "⚠️" },
-        ],
-        override: { label: "Volatile Market Override", rules: ["Declare by 10:05 AM", "Max +90 min", "Hard cap 11:00 AM", "Max 2/week"] },
-      },
-      {
-        id: "decompression", time: "10:15 AM", endTime: "11:00 AM", label: "Decompression (No Screens)", icon: "🚿", color: "#6366f1", type: "transition", duration: "45 min",
-        details: ["Leave trading room", "Shower / walk / mobility", "Shake or protein", "Zero screens"],
-        meal: { time: "10:30 AM", label: "Shake", rule: "Missed 8:30 → eat here. No compounding." },
-        adhd: "Momentum kill switch.",
-      },
-      {
-        id: "meriwick_light", time: "11:00 AM", endTime: "11:45 AM", label: "Meriwick — Light Work", icon: "🎵", color: "#8b5cf680", type: "focus", duration: "45 min",
-        details: ["Emails, follow-ups, scheduling", "Clear decks for deep work"],
-        adhd: "Warmup only.",
-      },
-      {
-        id: "lunch", time: "11:45 AM", endTime: "12:15 PM", label: "Lunch", icon: "🍽️", color: "#f59e0b", type: "ritual", duration: "30 min",
-        details: ["Persistent alarm", "In hands by 12:15 PM", "Backup if not ready", "Digest while eating"],
-        meal: { time: "11:45 AM", label: "Lunch", reminder: "Lunch. Eat now before momentum steals it.", rule: "By 12:15 PM. No 'later.'" },
-        adhd: "Before deep work.",
-      },
-    ];
+const AFT_TUESDAY=[
+{id:"meriwick_deep",time:"12:15 PM",endTime:"2:00 PM",label:"Meriwick — Deep Work (Short)",icon:"🎵",color:"#8b5cf6",type:"focus",duration:"1h 45m",details:["15 min shorter — therapy at 2:00 PM","No big tasks after 1:30 PM","Wrap by 1:50 PM"],adhd:"Don't overcommit near the edge.",escalation:[{time:"1:45 PM",level:"Awareness",action:"15-min countdown",icon:"👁️"},{time:"1:55 PM",level:"Force",action:"'Therapy in 5.'",icon:"🚪"}]},
+{id:"therapy",time:"2:00 PM",endTime:"3:00 PM",label:"Therapy (Virtual)",icon:"🧠",color:"#ec4899",type:"ritual",duration:"1 hr",details:["Virtual — quiet space","Close all work tabs","No multitasking","Nap window = quiet house"],adhd:"Don't 'finish one thing' at 1:58."},
+{id:"workout",time:"3:00 PM",endTime:"4:30 PM",label:"Workout + Recovery (60+30)",icon:"🏋️",color:"#6366f1",type:"transition",duration:"90 min",details:["Home gym after therapy","Full 60 min","30-min shower + protein","Therapy → workout = process + move"],meal:{time:"4:15 PM",label:"Post-Workout",defaults:["Shake","Bar","Eggs"]},adhd:"Don't skip because therapy felt heavy."},
+{id:"flex",time:"4:30 PM",endTime:"5:00 PM",label:"Flex (Short)",icon:"🔄",color:"#64748b",type:"flex",duration:"30 min",details:["ONE loop to close","Trading prep OR Meriwick admin"],adhd:"Shorter = tighter. One task."},
+{id:"shutdown",time:"5:00 PM",endTime:"5:30 PM",label:"Shutdown Ritual",icon:"📋",color:"#6366f1",type:"transition",duration:"30 min",details:["Open loops","Tomorrow's top 3","DINNER DECISION","Execute by 5:30 PM"],meal:{time:"5:00 PM",label:"Dinner Decision",reminder:"Cooking or ordering? NOW.",rule:"By 5:30 PM."},adhd:"30 min later on Tuesdays."}];
 
-    // ── AFTERNOONS ──
-    const AFT_NORMAL = [
-      {
-        id: "meriwick_deep", time: "12:15 PM", endTime: "2:15 PM", label: "Meriwick — Deep Work", icon: "🎵", color: "#8b5cf6", type: "focus", duration: "2 hrs",
-        details: ["Meriwick Focus Mode", "Nap window = quiet", "SIA, reports, strategy"],
-        adhd: "Best environment.",
-        escalation: [{ time: "2:00 PM", level: "Awareness", action: "15-min countdown", icon: "👁️" }, { time: "2:15 PM", level: "Force", action: "'Gym now.'", icon: "🚪" }],
-      },
-      {
-        id: "workout", time: "2:15 PM", endTime: "3:45 PM", label: "Workout + Recovery (60+30)", icon: "🏋️", color: "#6366f1", type: "transition", duration: "90 min",
-        details: ["Home gym", "60-min workout", "30-min shower + protein", "Phone away"],
-        meal: { time: "3:30 PM", label: "Post-Workout", defaults: ["Shake", "Bar", "Eggs"] },
-        adhd: "Physical transition + energy reset.",
-      },
-      {
-        id: "flex", time: "3:45 PM", endTime: "4:30 PM", label: "Flex Block", icon: "🔄", color: "#64748b", type: "flex", duration: "45 min",
-        details: ["Trading prep", "Meriwick admin", "MBA / S-Corp", "Close loops only"],
-        adhd: "Prevents evening work.",
-      },
-      {
-        id: "shutdown", time: "4:30 PM", endTime: "5:00 PM", label: "Shutdown Ritual", icon: "📋", color: "#6366f1", type: "transition", duration: "30 min",
-        details: ["Capture open loops", "Tomorrow's top 3", "DINNER DECISION", "Execute by 5:00 PM"],
-        meal: { time: "4:30 PM", label: "Dinner Decision", reminder: "Cooking or ordering? NOW.", rule: "By 5:00 PM." },
-        adhd: "Forced decision.",
-      },
-    ];
+const AFT_SUNDAY=[
+{id:"meriwick_deep",time:"12:15 PM",endTime:"1:00 PM",label:"Meriwick — Light Review",icon:"🎵",color:"#8b5cf680",type:"focus",duration:"45 min",details:["Quick SIA scan","Flag anything for Monday","NOT deep work"],adhd:"Scan, flag, move on."},
+{id:"meal_prep",time:"1:00 PM",endTime:"2:30 PM",label:"Meal Prep + Week Setup",icon:"🧑‍🍳",color:"#6366f1",type:"ritual",duration:"90 min",details:["Prep class-night dinners","Prep protein snack defaults","Prep lunch defaults (optional)","Stock check","Confirm week schedule"],meal:{time:"1:00 PM",label:"Meal Prep Block"},adhd:"Keystone block. Skip → class nights collapse."},
+{id:"walk",time:"2:30 PM",endTime:"3:30 PM",label:"Walk / Mobility",icon:"🚶",color:"#6366f1",type:"transition",duration:"60 min",details:["Low-friction movement","Active recovery","No screens"],adhd:"Recovery, not performance."},
+{id:"flex_sun",time:"3:30 PM",endTime:"4:30 PM",label:"Flex (Week Planning)",icon:"🔄",color:"#64748b",type:"flex",duration:"60 min",details:["Plan the week","Light admin","Address avoidance pile"],adhd:"Handle what you've been avoiding."},
+{id:"shutdown",time:"4:30 PM",endTime:"5:00 PM",label:"Shutdown Ritual",icon:"📋",color:"#6366f1",type:"transition",duration:"30 min",details:["Capture open loops","Week priorities","DINNER DECISION"],meal:{time:"4:30 PM",label:"Dinner Decision",reminder:"Cooking or ordering? NOW.",rule:"By 5:00 PM."},adhd:"Sunday shutdown sets the week."}];
 
-    const AFT_TUESDAY = [
-      {
-        id: "meriwick_deep", time: "12:15 PM", endTime: "2:00 PM", label: "Meriwick — Deep Work (Short)", icon: "🎵", color: "#8b5cf6", type: "focus", duration: "1h 45m",
-        details: ["15 min shorter — therapy at 2:00 PM", "No big tasks after 1:30 PM", "Wrap by 1:50 PM"],
-        adhd: "Don't overcommit near the edge.",
-        escalation: [{ time: "1:45 PM", level: "Awareness", action: "15-min countdown", icon: "👁️" }, { time: "1:55 PM", level: "Force", action: "'Therapy in 5.'", icon: "🚪" }],
-      },
-      {
-        id: "therapy", time: "2:00 PM", endTime: "3:00 PM", label: "Therapy (Virtual)", icon: "🧠", color: "#ec4899", type: "ritual", duration: "1 hr",
-        details: ["Virtual — quiet space", "Close all work tabs", "No multitasking", "Nap window = quiet house"],
-        adhd: "Don't 'finish one thing' at 1:58.",
-      },
-      {
-        id: "workout", time: "3:00 PM", endTime: "4:30 PM", label: "Workout + Recovery (60+30)", icon: "🏋️", color: "#6366f1", type: "transition", duration: "90 min",
-        details: ["Home gym after therapy", "Full 60 min", "30-min shower + protein", "Therapy → workout = process + move"],
-        meal: { time: "4:15 PM", label: "Post-Workout", defaults: ["Shake", "Bar", "Eggs"] },
-        adhd: "Don't skip because therapy felt heavy.",
-      },
-      {
-        id: "flex", time: "4:30 PM", endTime: "5:00 PM", label: "Flex (Short)", icon: "🔄", color: "#64748b", type: "flex", duration: "30 min",
-        details: ["ONE loop to close", "Trading prep OR Meriwick admin"],
-        adhd: "Shorter = tighter. One task.",
-      },
-      {
-        id: "shutdown", time: "5:00 PM", endTime: "5:30 PM", label: "Shutdown Ritual", icon: "📋", color: "#6366f1", type: "transition", duration: "30 min",
-        details: ["Open loops", "Tomorrow's top 3", "DINNER DECISION", "Execute by 5:30 PM"],
-        meal: { time: "5:00 PM", label: "Dinner Decision", reminder: "Cooking or ordering? NOW.", rule: "By 5:30 PM." },
-        adhd: "30 min later on Tuesdays.",
-      },
-    ];
+const EVE_NORMAL=[
+{id:"dinner",time:"5:30 PM",endTime:"6:15 PM",label:"Dinner",icon:"🍳",color:"#f59e0b",type:"ritual",duration:"45 min",details:["Cook + eat or delivery","No work screens"],meal:{time:"5:30 PM",label:"Dinner"},adhd:"Appointment, not hope."},
+{id:"evening",time:"6:15 PM",endTime:"10:00 PM",label:"Screens Down — Personal",icon:"💛",color:"#fbbf24",type:"protected",duration:"3h 45m",details:["Focus: Personal","Wife time","NO work"],adhd:"Relationship boundary.",escalation:[{time:"6:15 PM",level:"Force",action:"Personal mode. Work locked.",icon:"🔒"}]}];
 
-    const AFT_SUNDAY = [
-      {
-        id: "meriwick_deep", time: "12:15 PM", endTime: "1:00 PM", label: "Meriwick — Light Review", icon: "🎵", color: "#8b5cf680", type: "focus", duration: "45 min",
-        details: ["Quick SIA scan", "Flag anything for Monday", "NOT deep work"],
-        adhd: "Scan, flag, move on.",
-      },
-      {
-        id: "meal_prep", time: "1:00 PM", endTime: "2:30 PM", label: "Meal Prep + Week Setup", icon: "🧑‍🍳", color: "#6366f1", type: "ritual", duration: "90 min",
-        details: ["Prep class-night dinners", "Prep protein snack defaults", "Prep lunch defaults (optional)", "Stock check", "Confirm week schedule"],
-        adhd: "Keystone block. Skip → class nights collapse.",
-      },
-      {
-        id: "walk", time: "2:30 PM", endTime: "3:30 PM", label: "Walk / Mobility", icon: "🚶", color: "#6366f1", type: "transition", duration: "60 min",
-        details: ["Low-friction movement", "Active recovery", "No screens"],
-        adhd: "Recovery, not performance.",
-      },
-      {
-        id: "flex_sun", time: "3:30 PM", endTime: "4:30 PM", label: "Flex (Week Planning)", icon: "🔄", color: "#64748b", type: "flex", duration: "60 min",
-        details: ["Plan the week", "Light admin", "Address avoidance pile"],
-        adhd: "Handle what you've been avoiding.",
-      },
-      {
-        id: "shutdown", time: "4:30 PM", endTime: "5:00 PM", label: "Shutdown Ritual", icon: "📋", color: "#6366f1", type: "transition", duration: "30 min",
-        details: ["Capture open loops", "Week priorities", "DINNER DECISION"],
-        meal: { time: "4:30 PM", label: "Dinner Decision", reminder: "Cooking or ordering? NOW.", rule: "By 5:00 PM." },
-        adhd: "Sunday shutdown sets the week.",
-      },
-    ];
+const EVE_CAP=[
+{id:"snack_pre",time:"5:00 PM",endTime:"5:15 PM",label:"Snack + Prep",icon:"🍎",color:"#f59e0b",type:"ritual",duration:"15 min",details:["Light snack","Quick review"],meal:{time:"5:00 PM",label:"Pre-Class Snack"},adhd:"Eat or wait until 8 PM."},
+{id:"class",time:"5:30 PM",endTime:"7:30 PM",label:"CAPSTONE CLASS",icon:"🎓",color:"#8b5cf6",type:"focus",duration:"2 hrs",details:["Focus: MBA"],adhd:"System pauses."},
+{id:"dinner_post",time:"7:45 PM",endTime:"8:15 PM",label:"Dinner (Pre-prepped)",icon:"🍳",color:"#f59e0b",type:"ritual",duration:"30 min",details:["Heat from Sunday","No decisions"],meal:{time:"7:45 PM",label:"Dinner (Pre-prepped)",rule:"Not prepped? Order now."},adhd:"Heat it."},
+{id:"evening_short",time:"8:15 PM",endTime:"10:00 PM",label:"Personal (Shorter)",icon:"💛",color:"#fbbf24",type:"protected",duration:"1h 45m",details:["Still protected","NO work after class"],adhd:"Eat. Done.",escalation:[{time:"8:15 PM",level:"Force",action:"Personal mode.",icon:"🔒"}]}];
 
-    // ── EVENINGS ──
-    const EVE_NORMAL = [
-      { id: "dinner", time: "5:30 PM", endTime: "6:15 PM", label: "Dinner", icon: "🍳", color: "#f59e0b", type: "ritual", duration: "45 min", details: ["Cook + eat or delivery", "No work screens"], adhd: "Appointment, not hope." },
-      { id: "evening", time: "6:15 PM", endTime: "10:00 PM", label: "Screens Down — Personal", icon: "💛", color: "#fbbf24", type: "protected", duration: "3h 45m", details: ["Focus: Personal", "Wife time", "NO work"], adhd: "Relationship boundary.", escalation: [{ time: "6:15 PM", level: "Force", action: "Personal mode. Work locked.", icon: "🔒" }] },
-    ];
+const EVE_AI=[
+{id:"snack_pre",time:"5:00 PM",endTime:"5:15 PM",label:"Snack Before Class",icon:"🍎",color:"#f59e0b",type:"ritual",duration:"15 min",details:["Protein — 4 hrs ahead"],meal:{time:"5:00 PM",label:"Pre-Class Snack",reminder:"Eat now. 4-hour class.",defaults:["Bar","Shake"]},adhd:"4 hrs no food = crash."},
+{id:"class",time:"5:30 PM",endTime:"9:30 PM",label:"AI IN MARKETING",icon:"🎓",color:"#f59e0b",type:"focus",duration:"4 hrs",details:["Focus: MBA"],adhd:"Long. System pauses."},
+{id:"dinner_post",time:"9:45 PM",endTime:"10:15 PM",label:"Dinner (Pre-prepped)",icon:"🍳",color:"#f59e0b",type:"ritual",duration:"30 min",details:["Heat from Sunday"],meal:{time:"9:45 PM",label:"Dinner (Pre-prepped)",rule:"Not prepped? Order."},adhd:"Late. Eat what's made."},
+{id:"wind",time:"10:15 PM",endTime:"10:45 PM",label:"Wind Down → Sleep",icon:"🌙",color:"#64748b",type:"protected",duration:"30 min",details:["No catch-up"],adhd:"Don't 'make up' the evening."}];
 
-    const EVE_CAP = [
-      { id: "snack_pre", time: "5:00 PM", endTime: "5:15 PM", label: "Snack + Prep", icon: "🍎", color: "#f59e0b", type: "ritual", duration: "15 min", details: ["Light snack", "Quick review"], meal: { time: "5:00 PM", label: "Pre-Class Snack" }, adhd: "Eat or wait until 8 PM." },
-      { id: "class", time: "5:30 PM", endTime: "7:30 PM", label: "CAPSTONE CLASS", icon: "🎓", color: "#8b5cf6", type: "focus", duration: "2 hrs", details: ["Focus: MBA"], adhd: "System pauses." },
-      { id: "dinner_post", time: "7:45 PM", endTime: "8:15 PM", label: "Dinner (Pre-prepped)", icon: "🍳", color: "#f59e0b", type: "ritual", duration: "30 min", details: ["Heat from Sunday", "No decisions"], meal: { time: "7:45 PM", label: "Post-Class Dinner", rule: "Not prepped? Order now." }, adhd: "Heat it." },
-      { id: "evening_short", time: "8:15 PM", endTime: "10:00 PM", label: "Personal (Shorter)", icon: "💛", color: "#fbbf24", type: "protected", duration: "1h 45m", details: ["Still protected", "NO work after class"], adhd: "Eat. Done.", escalation: [{ time: "8:15 PM", level: "Force", action: "Personal mode.", icon: "🔒" }] },
-    ];
+function getAft(k){return k==="tuesday"?AFT_TUESDAY:k==="sunday"?AFT_SUNDAY:AFT_NORMAL}
+function getEve(k){return k==="ai"?EVE_AI:k==="capstone"?EVE_CAP:EVE_NORMAL}
+function getBlocks(k){return[...CORE,...getAft(k),...getEve(k)]}
 
-    const EVE_AI = [
-      { id: "snack_pre", time: "5:00 PM", endTime: "5:15 PM", label: "Snack Before Class", icon: "🍎", color: "#f59e0b", type: "ritual", duration: "15 min", details: ["Protein — 4 hrs ahead"], meal: { time: "5:00 PM", label: "Pre-Class Snack", reminder: "Eat now. 4-hour class.", defaults: ["Bar", "Shake"] }, adhd: "4 hrs no food = crash." },
-      { id: "class", time: "5:30 PM", endTime: "9:30 PM", label: "AI IN MARKETING", icon: "🎓", color: "#f59e0b", type: "focus", duration: "4 hrs", details: ["Focus: MBA"], adhd: "Long. System pauses." },
-      { id: "dinner_post", time: "9:45 PM", endTime: "10:15 PM", label: "Dinner (Pre-prepped)", icon: "🍳", color: "#f59e0b", type: "ritual", duration: "30 min", details: ["Heat from Sunday"], meal: { time: "9:45 PM", label: "Post-Class Dinner", rule: "Not prepped? Order." }, adhd: "Late. Eat what's made." },
-      { id: "wind", time: "10:15 PM", endTime: "10:45 PM", label: "Wind Down → Sleep", icon: "🌙", color: "#64748b", type: "protected", duration: "30 min", details: ["No catch-up"], adhd: "Don't 'make up' the evening." },
-    ];
+const METRICS=[
+{m:"Trading overrides",t:"≤ 2/wk",w:">2 → adjust cutoff",c:"#10b981"},
+{m:"8:30 AM protein snack",t:"≥ 5/7",w:"Anti-crash fuel",c:"#f59e0b"},
+{m:"Lunch by 12:15 PM",t:"≥ 5/7",w:"Anchor health",c:"#f59e0b"},
+{m:"Workout completed",t:"≥ 4/7",w:"IS the transition",c:"#6366f1"},
+{m:"Therapy attended",t:"Every Tue",w:"Non-negotiable",c:"#ec4899"},
+{m:"Sunday prep done",t:"Every wk",w:"Skip = collapse",c:"#6366f1"},
+{m:"Dinner on schedule",t:"≥ 6/7",w:"Includes class nights",c:"#f59e0b"},
+{m:"Takeout",t:"≤ 2/wk",w:"System health",c:"#ef4444"},
+{m:"Screens-down",t:"≥ 5/7",w:"Class nights exempt",c:"#fbbf24"},
+{m:"Evening work",t:"0/wk",w:"Any = leak",c:"#ef4444"}];
 
-    // ── ASSEMBLY ──
-    function getAft(k) { return k === "tuesday" ? AFT_TUESDAY : k === "sunday" ? AFT_SUNDAY : AFT_NORMAL; }
-    function getEve(k) { return k === "ai" ? EVE_AI : k === "capstone" ? EVE_CAP : EVE_NORMAL; }
-    function getBlocks(k) { return [...CORE, ...getAft(k), ...getEve(k)]; }
+const DAY_META={
+normal:{label:"Normal Day",sub:"Mon, Wed, Fri, Sat",color:"#10b981",icon:"📅"},
+tuesday:{label:"Tuesday (Therapy)",sub:"Therapy 2 PM · Workout → 3 PM",color:"#ec4899",icon:"🧠"},
+capstone:{label:"Capstone Night",sub:"Class 5:30–7:30 PM",color:"#8b5cf6",icon:"🎓"},
+ai:{label:"AI in Marketing",sub:"Class 5:30–9:30 PM",color:"#f59e0b",icon:"🎓"},
+sunday:{label:"Sunday (Prep)",sub:"Meal prep + plan week",color:"#6366f1",icon:"🧑‍🍳"}};
 
-    // ── MEALS ──
-    const ML = {
-      normal: [
-        { t: "6:00 AM", l: "Breakfast", i: "🥣", c: "#f59e0b" }, { t: "8:30 AM", l: "Protein Snack", i: "💪", c: "#10b981" },
-        { t: "10:30 AM", l: "Shake", i: "🥤", c: "#6366f1" }, { t: "11:45 AM", l: "Lunch", i: "🥗", c: "#f59e0b" },
-        { t: "3:30 PM", l: "Post-Workout", i: "🥤", c: "#6366f1" }, { t: "5:30 PM", l: "Dinner", i: "🍳", c: "#f59e0b" },
-      ],
-      tuesday: [
-        { t: "6:00 AM", l: "Breakfast", i: "🥣", c: "#f59e0b" }, { t: "8:30 AM", l: "Protein Snack", i: "💪", c: "#10b981" },
-        { t: "10:30 AM", l: "Shake", i: "🥤", c: "#6366f1" }, { t: "11:45 AM", l: "Lunch", i: "🥗", c: "#f59e0b" },
-        { t: "4:15 PM", l: "Post-Workout", i: "🥤", c: "#6366f1" }, { t: "5:30 PM", l: "Dinner", i: "🍳", c: "#f59e0b" },
-      ],
-      capstone: [
-        { t: "6:00 AM", l: "Breakfast", i: "🥣", c: "#f59e0b" }, { t: "8:30 AM", l: "Protein Snack", i: "💪", c: "#10b981" },
-        { t: "10:30 AM", l: "Shake", i: "🥤", c: "#6366f1" }, { t: "11:45 AM", l: "Lunch", i: "🥗", c: "#f59e0b" },
-        { t: "3:30 PM", l: "Post-Workout", i: "🥤", c: "#6366f1" }, { t: "5:00 PM", l: "Pre-Class Snack", i: "🍎", c: "#8b5cf6" },
-        { t: "7:45 PM", l: "Dinner", i: "🍳", c: "#f59e0b" },
-      ],
-      ai: [
-        { t: "6:00 AM", l: "Breakfast", i: "🥣", c: "#f59e0b" }, { t: "8:30 AM", l: "Protein Snack", i: "💪", c: "#10b981" },
-        { t: "10:30 AM", l: "Shake", i: "🥤", c: "#6366f1" }, { t: "11:45 AM", l: "Lunch", i: "🥗", c: "#f59e0b" },
-        { t: "3:30 PM", l: "Post-Workout", i: "🥤", c: "#6366f1" }, { t: "5:00 PM", l: "Pre-Class Snack", i: "🍎", c: "#f59e0b" },
-        { t: "9:45 PM", l: "Dinner", i: "🍳", c: "#f59e0b" },
-      ],
-      sunday: [
-        { t: "6:00 AM", l: "Breakfast", i: "🥣", c: "#f59e0b" }, { t: "8:30 AM", l: "Protein Snack", i: "💪", c: "#10b981" },
-        { t: "10:30 AM", l: "Shake", i: "🥤", c: "#6366f1" }, { t: "11:45 AM", l: "Lunch", i: "🥗", c: "#f59e0b" },
-        { t: "5:30 PM", l: "Dinner", i: "🍳", c: "#f59e0b" },
-      ],
-    };
+function getPreviewDates(anchor){const dates=[];for(let i=0;i<14;i++){const d=addDays(anchor,i);dates.push({date:d,dt:detectDayType(d)})}return dates}
 
-    // ── METRICS ──
-    const METRICS = [
-      { m: "Trading overrides", t: "≤ 2/wk", w: ">2 → adjust cutoff", c: "#10b981" },
-      { m: "8:30 AM protein snack", t: "≥ 5/7", w: "Anti-crash fuel", c: "#f59e0b" },
-      { m: "Lunch by 12:15 PM", t: "≥ 5/7", w: "Anchor health", c: "#f59e0b" },
-      { m: "Workout completed", t: "≥ 4/7", w: "IS the transition", c: "#6366f1" },
-      { m: "Therapy attended", t: "Every Tue", w: "Non-negotiable", c: "#ec4899" },
-      { m: "Sunday prep done", t: "Every wk", w: "Skip = collapse", c: "#6366f1" },
-      { m: "Dinner on schedule", t: "≥ 6/7", w: "Includes class nights", c: "#f59e0b" },
-      { m: "Takeout", t: "≤ 2/wk", w: "System health", c: "#ef4444" },
-      { m: "Screens-down", t: "≥ 5/7", w: "Class nights exempt", c: "#fbbf24" },
-      { m: "Evening work", t: "0/wk", w: "Any = leak", c: "#ef4444" },
-    ];
+function Tag({type}){const c={ritual:["Ritual","#f59e0b"],focus:["Focus","#10b981"],transition:["Trans","#6366f1"],flex:["Flex","#64748b"],protected:["Guard","#fbbf24"]}[type];return<span style={{fontSize:7,fontWeight:700,padding:"1px 4px",borderRadius:3,background:c[1]+"10",color:c[1],textTransform:"uppercase",letterSpacing:"0.03em"}}>{c[0]}</span>}
 
-    const DAY_META = {
-      normal: { label: "Normal Day", sub: "Mon, Wed, Fri, Sat", color: "#10b981", icon: "📅" },
-      tuesday: { label: "Tuesday (Therapy)", sub: "Therapy 2 PM · Workout → 3 PM", color: "#ec4899", icon: "🧠" },
-      capstone: { label: "Capstone Night", sub: "Class 5:30–7:30 PM", color: "#8b5cf6", icon: "🎓" },
-      ai: { label: "AI in Marketing", sub: "Class 5:30–9:30 PM", color: "#f59e0b", icon: "🎓" },
-      sunday: { label: "Sunday (Prep)", sub: "Meal prep + plan week", color: "#6366f1", icon: "🧑‍🍳" },
-    };
+function Blk({b,open,toggle,isActive}){return(
+<div style={{display:"flex",gap:8,marginBottom:1}}>
+<div style={{minWidth:52,textAlign:"right",paddingTop:9}}>
+<div style={{color:b.color,fontSize:9,fontWeight:700,fontFamily:"monospace"}}>{b.time}</div>
+<div style={{color:"#1a1a24",fontSize:7}}>{b.duration}</div></div>
+<div style={{display:"flex",flexDirection:"column",alignItems:"center",minWidth:10}}>
+<div style={{width:isActive?8:6,height:isActive?8:6,borderRadius:"50%",background:b.color,flexShrink:0,marginTop:10,boxShadow:isActive?`0 0 8px ${b.color}60`:`0 0 3px ${b.color}22`,transition:"all 0.3s"}}/>
+<div style={{width:1,flex:1,background:`${b.color}0e`,marginTop:1}}/></div>
+<div style={{flex:1,paddingBottom:4}}>
+<button onClick={toggle} style={{width:"100%",textAlign:"left",background:isActive?b.color+"08":open?"#0b0b16":"#07070c",border:`1px solid ${isActive?b.color+"20":open?b.color+"12":"#0c0c14"}`,borderRadius:6,padding:"6px 8px",cursor:"pointer",transition:"all 0.1s"}}>
+<div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+<div style={{display:"flex",alignItems:"center",gap:4}}>
+<span style={{fontSize:12}}>{b.icon}</span>
+<span style={{color:isActive?"#ccd":"#aab",fontSize:10,fontWeight:700}}>{b.label}</span></div>
+<div style={{display:"flex",alignItems:"center",gap:3}}>
+{isActive&&<span style={{fontSize:7,fontWeight:700,padding:"1px 4px",borderRadius:3,background:b.color+"18",color:b.color,letterSpacing:"0.03em"}}>NOW</span>}
+{b.meal&&<span style={{fontSize:6,color:"#f59e0b"}}>🍽️</span>}
+<Tag type={b.type}/>
+<span style={{color:"#141420",fontSize:8,transform:open?"rotate(180deg)":"",transition:"0.1s"}}>▾</span></div></div>
+{open&&(
+<div style={{marginTop:6,borderTop:"1px solid #10101a",paddingTop:5}}>
+{b.details.map((d,i)=><div key={i} style={{color:"#556",fontSize:9,padding:"1px 0",display:"flex",gap:4,lineHeight:1.4}}><span style={{color:b.color}}>→</span><span>{d}</span></div>)}
+{b.meal&&b.meal.reminder&&(
+<div style={{background:"#0c0a05",borderRadius:3,padding:5,marginTop:4,borderLeft:"2px solid #f59e0b"}}>
+<div style={{color:"#fbbf24",fontSize:9,fontWeight:700,fontStyle:"italic"}}>"{b.meal.reminder}"</div>
+{b.meal.rule&&<div style={{color:"#f59e0b",fontSize:8,fontWeight:600,marginTop:2}}>Rule: {b.meal.rule}</div>}
+{b.meal.defaults&&<div style={{marginTop:2}}>{b.meal.defaults.map((x,j)=><span key={j} style={{color:"#705818",fontSize:7,background:"#f59e0b06",padding:"1px 3px",borderRadius:2,marginRight:2}}>{x}</span>)}</div>}
+</div>)}
+{b.adhd&&<div style={{background:"#08071a",borderRadius:3,padding:5,marginTop:4,borderLeft:"2px solid #818cf8"}}><div style={{color:"#7878a0",fontSize:8,lineHeight:1.35}}>🧠 {b.adhd}</div></div>}
+{b.escalation&&<div style={{marginTop:4}}>{b.escalation.map((s,i)=>(
+<div key={i} style={{display:"flex",gap:4,padding:"1px 0"}}>
+<span style={{fontSize:9}}>{s.icon}</span>
+<span style={{color:"#3a3a48",fontSize:8,fontFamily:"monospace",minWidth:48}}>{s.time}</span>
+<span style={{color:"#556",fontSize:8}}>{s.action}</span></div>))}</div>}
+{b.override&&(
+<div style={{background:"#0c0a05",borderRadius:3,padding:5,marginTop:4,borderLeft:"2px solid #f59e0b"}}>
+<div style={{fontSize:7,fontWeight:700,color:"#f59e0b",marginBottom:2}}>⚡ {b.override.label}</div>
+{b.override.rules.map((r,i)=><div key={i} style={{color:"#705818",fontSize:8}}>• {r}</div>)}</div>)}
+</div>)}
+</button></div></div>)}
 
-    // ── PREVIEWS ──
-    function getPreviewDates(anchor) {
-      const dates = [];
-      for (let i = 0; i < 14; i++) {
-        const d = addDays(anchor, i);
-        dates.push({ date: d, dt: detectDayType(d) });
-      }
-      return dates;
-    }
+function App(){
+const[selectedDate,setSelectedDate]=useState(()=>{const iso=load("cos_selectedDate",null);return iso?noonDate(iso):realToday});
+const[tab,setTab]=useState(()=>load("cos_tab","schedule"));
+const dt=useMemo(()=>detectDayType(selectedDate),[selectedDate]);
+const[exp,setExp]=useState(()=>{const raw=load("cos_exp",null);return raw?new Set(raw):defaultExpanded(dt.key)});
+useEffect(()=>{save("cos_selectedDate",toLocalISO(selectedDate))},[selectedDate]);
+useEffect(()=>{save("cos_tab",tab)},[tab]);
+useEffect(()=>{save("cos_exp",Array.from(exp))},[exp]);
+const[tick,setTick]=useState(0);
+useEffect(()=>{const t=setInterval(()=>setTick(x=>x+1),60000);return()=>clearInterval(t)},[]);
+const blocks=useMemo(()=>getBlocks(dt.key),[dt.key]);
+const meta=DAY_META[dt.key];
+const previews=useMemo(()=>getPreviewDates(realToday),[realToday]);
+const isToday=toLocalISO(selectedDate)===toLocalISO(realToday);
+const meals=useMemo(()=>{const ms=[];const seen=new Set();blocks.forEach(b=>{if(b.meal){const k=b.meal.time+"|"+b.meal.label;if(!seen.has(k)){seen.add(k);ms.push({t:b.meal.time,l:b.meal.label,c:b.color})}}});return ms},[blocks]);
+const now=nowMins();
+const active=isToday?blocks.find(b=>now>=minsFromTimeStr(b.time)&&now<minsFromTimeStr(b.endTime)):null;
+const next=isToday?blocks.find(b=>minsFromTimeStr(b.time)>now):null;
+const selectDay=useCallback((d,key)=>{setSelectedDate(d);setExp(defaultExpanded(key))},[]);
+const tog=id=>setExp(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n});
 
-    // ── UI ──
-    function Tag({ type }) {
-      const c = { ritual: ["Ritual", "#f59e0b"], focus: ["Focus", "#10b981"], transition: ["Trans", "#6366f1"], flex: ["Flex", "#64748b"], protected: ["Guard", "#fbbf24"] }[type];
-      return <span style={{ fontSize: 7, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: c[1] + "10", color: c[1], textTransform: "uppercase", letterSpacing: "0.03em" }}>{c[0]}</span>;
-    }
+return(
+<div style={{background:"#05050a",minHeight:"100vh",color:"#aab",padding:"14px 11px",maxWidth:640,margin:"0 auto"}}>
 
-    function Blk({ b, open, toggle }) {
-      return (
-        <div style={{ display: "flex", gap: 8, marginBottom: 1 }}>
-          <div style={{ minWidth: 52, textAlign: "right", paddingTop: 9 }}>
-            <div style={{ color: b.color, fontSize: 9, fontWeight: 700, fontFamily: "monospace" }}>{b.time}</div>
-            <div style={{ color: "#1a1a24", fontSize: 7 }}>{b.duration}</div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 10 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: b.color, flexShrink: 0, marginTop: 10, boxShadow: `0 0 3px ${b.color}22` }} />
-            <div style={{ width: 1, flex: 1, background: `${b.color}0e`, marginTop: 1 }} />
-          </div>
-          <div style={{ flex: 1, paddingBottom: 4 }}>
-            <button onClick={toggle} style={{ width: "100%", textAlign: "left", background: open ? "#0b0b16" : "#07070c", border: `1px solid ${open ? b.color + "12" : "#0c0c14"}`, borderRadius: 6, padding: "6px 8px", cursor: "pointer", transition: "all 0.1s" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontSize: 12 }}>{b.icon}</span>
-                  <span style={{ color: "#aab", fontSize: 10, fontWeight: 700 }}>{b.label}</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                  {b.meal && <span style={{ fontSize: 6, color: "#f59e0b" }}>🍽️</span>}
-                  <Tag type={b.type} />
-                  <span style={{ color: "#141420", fontSize: 8, transform: open ? "rotate(180deg)" : "", transition: "0.1s" }}>▾</span>
-                </div>
-              </div>
-              {open && (
-                <div style={{ marginTop: 6, borderTop: "1px solid #10101a", paddingTop: 5 }}>
-                  {b.details.map((d, i) => <div key={i} style={{ color: "#556", fontSize: 9, padding: "1px 0", display: "flex", gap: 4, lineHeight: 1.4 }}><span style={{ color: b.color }}>→</span><span>{d}</span></div>)}
-                  {b.meal && b.meal.reminder && (
-                    <div style={{ background: "#0c0a05", borderRadius: 3, padding: 5, marginTop: 4, borderLeft: "2px solid #f59e0b" }}>
-                      <div style={{ color: "#fbbf24", fontSize: 9, fontWeight: 700, fontStyle: "italic" }}>"{b.meal.reminder}"</div>
-                      {b.meal.rule && <div style={{ color: "#f59e0b", fontSize: 8, fontWeight: 600, marginTop: 2 }}>Rule: {b.meal.rule}</div>}
-                      {b.meal.defaults && <div style={{ marginTop: 2 }}>{b.meal.defaults.map((x, j) => <span key={j} style={{ color: "#705818", fontSize: 7, background: "#f59e0b06", padding: "1px 3px", borderRadius: 2, marginRight: 2 }}>{x}</span>)}</div>}
-                    </div>
-                  )}
-                  {b.adhd && <div style={{ background: "#08071a", borderRadius: 3, padding: 5, marginTop: 4, borderLeft: "2px solid #818cf8" }}><div style={{ color: "#7878a0", fontSize: 8, lineHeight: 1.35 }}>🧠 {b.adhd}</div></div>}
-                  {b.escalation && <div style={{ marginTop: 4 }}>{b.escalation.map((s, i) => (
-                    <div key={i} style={{ display: "flex", gap: 4, padding: "1px 0" }}>
-                      <span style={{ fontSize: 9 }}>{s.icon}</span>
-                      <span style={{ color: "#3a3a48", fontSize: 8, fontFamily: "monospace", minWidth: 48 }}>{s.time}</span>
-                      <span style={{ color: "#556", fontSize: 8 }}>{s.action}</span>
-                    </div>
-                  ))}</div>}
-                  {b.override && (
-                    <div style={{ background: "#0c0a05", borderRadius: 3, padding: 5, marginTop: 4, borderLeft: "2px solid #f59e0b" }}>
-                      <div style={{ fontSize: 7, fontWeight: 700, color: "#f59e0b", marginBottom: 2 }}>⚡ {b.override.label}</div>
-                      {b.override.rules.map((r, i) => <div key={i} style={{ color: "#705818", fontSize: 8 }}>• {r}</div>)}
-                    </div>
-                  )}
-                </div>
-              )}
-            </button>
-          </div>
-        </div>
-      );
-    }
+<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+<div style={{display:"flex",alignItems:"center",gap:5}}>
+<span style={{fontSize:14}}>⚡</span>
+<h1 style={{fontSize:14,fontWeight:700,margin:0,color:"#ccd"}}>Chief of Staff</h1></div>
+{!isToday&&(<button onClick={()=>selectDay(realToday,detectDayType(realToday).key)} style={{background:"#10b98110",border:"1px solid #10b98120",borderRadius:4,padding:"3px 8px",color:"#10b981",fontSize:8,fontWeight:700,cursor:"pointer"}}>← Today</button>)}</div>
 
-    // ── MAIN ──
-    function App() {
-      const [selectedDate, setSelectedDate] = useState(realToday);
-      const [exp, setExp] = useState(() => defaultExpanded("normal"));
-      const [tab, setTab] = useState("schedule");
+<div style={{marginBottom:8,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+<div style={{display:"flex",gap:2,minWidth:"max-content"}}>
+{previews.map((p,i)=>{const pm=DAY_META[p.dt.key];const sel=toLocalISO(p.date)===toLocalISO(selectedDate);const isReal=toLocalISO(p.date)===toLocalISO(realToday);return(
+<button key={i} onClick={()=>selectDay(p.date,p.dt.key)} style={{padding:"4px 6px",borderRadius:4,border:sel?`1px solid ${pm.color}28`:"1px solid #0a0a12",background:sel?pm.color+"0c":"#07070c",cursor:"pointer",minWidth:44,textAlign:"center"}}>
+<div style={{fontSize:7,color:sel?pm.color:"#2a2a38",fontWeight:700}}>{p.date.toLocaleDateString("en-US",{weekday:"short"})}</div>
+<div style={{fontSize:10,color:sel?"#bbc":"#1e1e2a",fontWeight:sel?700:400}}>{p.date.getDate()}</div>
+<div style={{fontSize:5,color:pm.color,marginTop:1,opacity:sel?1:0.5}}>{pm.icon}</div>
+{isReal&&<div style={{width:3,height:3,borderRadius:"50%",background:"#10b981",margin:"1px auto 0"}}/>}
+</button>)})}</div></div>
 
-      const dt = useMemo(() => detectDayType(selectedDate), [selectedDate]);
-      const blocks = useMemo(() => getBlocks(dt.key), [dt.key]);
-      const meals = ML[dt.key] || ML.normal;
-      const meta = DAY_META[dt.key];
-      const previews = useMemo(() => getPreviewDates(realToday), [realToday]);
-      const isToday = toLocalISO(selectedDate) === toLocalISO(realToday);
+<div style={{background:meta.color+"08",border:`1px solid ${meta.color}14`,borderRadius:5,padding:"7px 9px",marginBottom:9,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div>
+<div style={{fontSize:7,color:"#3a3a48",fontWeight:600,letterSpacing:"0.03em",textTransform:"uppercase"}}>{isToday?"Today":"Preview"}</div>
+<div style={{color:meta.color,fontSize:12,fontWeight:700}}>{meta.label}</div>
+<div style={{color:"#333",fontSize:8}}>{shortDate(selectedDate)}</div></div>
+<div style={{textAlign:"right"}}>
+{dt.events&&dt.events.length>0&&dt.events.map((e,i)=>(<div key={i} style={{color:meta.color,fontSize:9,fontWeight:700}}>{e.icon} {e.label} {e.time}</div>))}
+{dt.key==="sunday"&&<div style={{color:"#6366f1",fontSize:9,fontWeight:700}}>🧑‍🍳 Meal Prep Day</div>}</div></div>
 
-      const selectDay = useCallback((d, key) => {
-        setSelectedDate(d);
-        setExp(defaultExpanded(key));
-      }, []);
+{isToday&&(active||next)&&(
+<div style={{background:"#07070c",border:"1px solid #0c0c14",borderRadius:6,padding:"8px 9px",marginBottom:9}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div style={{color:"#3a3a48",fontSize:7,fontWeight:700,letterSpacing:"0.04em",textTransform:"uppercase"}}>Now / Next</div>
+<div style={{color:"#2a2a38",fontSize:8,fontFamily:"monospace"}}>{new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div></div>
+{active&&(
+<div style={{marginTop:6,padding:"6px 7px",borderRadius:4,borderLeft:`2px solid ${active.color}`,background:active.color+"06"}}>
+<div style={{display:"flex",alignItems:"center",gap:6}}>
+<span style={{fontSize:12}}>{active.icon}</span>
+<div style={{flex:1}}>
+<div style={{color:"#ccd",fontSize:10,fontWeight:700}}>{active.label}</div>
+<div style={{color:"#2a2a38",fontSize:8}}>{active.time} – {active.endTime}</div></div>
+<span style={{color:active.color,fontSize:8,fontWeight:700,fontFamily:"monospace",background:active.color+"14",padding:"1px 4px",borderRadius:2}}>NOW</span></div>
+{active.meal&&active.meal.reminder&&(<div style={{color:"#f59e0b",fontSize:8,marginTop:4,fontStyle:"italic"}}>🔔 "{active.meal.reminder}"</div>)}</div>)}
+{next&&(
+<div style={{marginTop:4,padding:"6px 7px",borderRadius:4,borderLeft:"2px solid #64748b",background:"#06060a"}}>
+<div style={{display:"flex",alignItems:"center",gap:6}}>
+<span style={{fontSize:12}}>{next.icon}</span>
+<div style={{flex:1}}>
+<div style={{color:"#aab",fontSize:10,fontWeight:700}}>{next.label}</div>
+<div style={{color:"#2a2a38",fontSize:8}}>{next.time} – {next.endTime}</div></div>
+<span style={{color:"#64748b",fontSize:8,fontWeight:700,fontFamily:"monospace"}}>NEXT</span></div></div>)}</div>)}
 
-      const tog = (id) => setExp((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+<div style={{display:"flex",gap:1,marginBottom:9,background:"#06060a",borderRadius:4,padding:1}}>
+{[{id:"schedule",l:"📅 Schedule"},{id:"meals",l:"🍽️ Meals"},{id:"mba",l:"🎓 MBA"},{id:"metrics",l:"📊 Metrics"}].map(t=>(
+<button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"4px 2px",borderRadius:3,border:"none",background:tab===t.id?"#10101e":"transparent",color:tab===t.id?"#aab":"#1e1e2a",fontSize:9,fontWeight:600,cursor:"pointer"}}>{t.l}</button>))}</div>
 
-      return (
-        <div style={{ background: "#05050a", minHeight: "100vh", color: "#aab", padding: "14px 11px", maxWidth: 640, margin: "0 auto" }}>
+{tab==="schedule"&&(
+<div>
+<div style={{display:"flex",gap:2,marginBottom:6,justifyContent:"flex-end"}}>
+<button onClick={()=>setExp(new Set(blocks.map(b=>b.id)))} style={{background:"none",border:"1px solid #0e0e18",borderRadius:2,padding:"1px 4px",color:"#1a1a28",fontSize:7,cursor:"pointer"}}>Expand</button>
+<button onClick={()=>setExp(new Set())} style={{background:"none",border:"1px solid #0e0e18",borderRadius:2,padding:"1px 4px",color:"#1a1a28",fontSize:7,cursor:"pointer"}}>Collapse</button></div>
+{blocks.map(b=><Blk key={b.id} b={b} open={exp.has(b.id)} toggle={()=>tog(b.id)} isActive={isToday&&active&&active.id===b.id}/>)}</div>)}
 
-          {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ fontSize: 14 }}>⚡</span>
-              <h1 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "#ccd" }}>Chief of Staff</h1>
-            </div>
-            {!isToday && (
-              <button onClick={() => selectDay(realToday, detectDayType(realToday).key)}
-                style={{ background: "#10b98110", border: "1px solid #10b98120", borderRadius: 4, padding: "3px 8px", color: "#10b981", fontSize: 8, fontWeight: 700, cursor: "pointer" }}>
-                ← Today
-              </button>
-            )}
-          </div>
+{tab==="meals"&&(
+<div>
+<div style={{background:"#07070c",borderRadius:4,padding:8,marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div style={{color:"#f59e0b",fontSize:9,fontWeight:700}}>Meals — {meta.label}</div>
+<span style={{fontSize:7,padding:"1px 4px",borderRadius:2,background:meta.color+"0e",color:meta.color,fontWeight:600}}>{shortDate(selectedDate)}</span></div>
+{meals.map((m,i)=>(
+<div key={i} style={{display:"flex",gap:5,background:"#06060a",borderRadius:3,padding:6,marginBottom:2,borderLeft:`2px solid ${m.c}`}}>
+<div style={{minWidth:50,textAlign:"right",color:m.c,fontSize:8,fontWeight:700,fontFamily:"monospace"}}>{m.t}</div>
+<span style={{color:"#99a",fontSize:9,fontWeight:600}}>{m.l}</span></div>))}
+{dt.key==="tuesday"&&<div style={{color:"#ec4899",fontSize:7,marginTop:4,padding:"3px 5px",background:"#ec489906",borderRadius:2}}>Post-workout shifts to 4:15 PM (therapy pushes workout).</div>}
+{dt.key==="sunday"&&<div style={{color:"#6366f1",fontSize:7,marginTop:4,padding:"3px 5px",background:"#6366f106",borderRadius:2}}>Prep class-night dinners + stock protein defaults.</div>}</div>)}
 
-          {/* Day Picker */}
-          <div style={{ marginBottom: 8, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-            <div style={{ display: "flex", gap: 2, minWidth: "max-content" }}>
-              {previews.map((p, i) => {
-                const pm = DAY_META[p.dt.key];
-                const sel = toLocalISO(p.date) === toLocalISO(selectedDate);
-                const isReal = toLocalISO(p.date) === toLocalISO(realToday);
-                return (
-                  <button key={i} onClick={() => selectDay(p.date, p.dt.key)}
-                    style={{ padding: "4px 6px", borderRadius: 4, border: sel ? `1px solid ${pm.color}28` : "1px solid #0a0a12", background: sel ? pm.color + "0c" : "#07070c", cursor: "pointer", minWidth: 44, textAlign: "center" }}>
-                    <div style={{ fontSize: 7, color: sel ? pm.color : "#2a2a38", fontWeight: 700 }}>{p.date.toLocaleDateString("en-US", { weekday: "short" })}</div>
-                    <div style={{ fontSize: 10, color: sel ? "#bbc" : "#1e1e2a", fontWeight: sel ? 700 : 400 }}>{p.date.getDate()}</div>
-                    <div style={{ fontSize: 5, color: pm.color, marginTop: 1, opacity: sel ? 1 : 0.5 }}>{pm.icon}</div>
-                    {isReal && <div style={{ width: 3, height: 3, borderRadius: "50%", background: "#10b981", margin: "1px auto 0" }} />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+{tab==="mba"&&(
+<div>
+{MBA_CLASSES.map((c,i)=>{const cd=noonDate(c.date);const diff=Math.ceil((cd-realToday)/864e5);const soon=diff>=0&&diff<=3;const cc=c.course.startsWith("AI")?"#f59e0b":"#8b5cf6";const sel=c.date===toLocalISO(selectedDate);return(
+<button key={i} onClick={()=>{selectDay(noonDate(c.date),detectDayType(noonDate(c.date)).key);setTab("schedule")}} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 7px",marginBottom:2,background:sel?cc+"0a":"#07070c",borderRadius:4,border:`1px solid ${sel?cc+"1e":"#0c0c14"}`,opacity:diff<0?0.25:1,cursor:"pointer",width:"100%",textAlign:"left"}}>
+<div style={{minWidth:55}}><div style={{color:cc,fontSize:8,fontWeight:700,fontFamily:"monospace"}}>{c.date.slice(5)}</div><div style={{color:"#1e1e2a",fontSize:7}}>{c.day}</div></div>
+<div style={{flex:1}}><div style={{color:"#aab",fontSize:9,fontWeight:600}}>{c.course}</div><div style={{color:"#2a2a38",fontSize:7}}>{c.time}</div></div>
+{diff>=0&&<span style={{color:soon?cc:"#2a2a38",fontSize:7,fontWeight:soon?700:400}}>{soon?"📌 ":""}{diff}d</span>}
+</button>)})}
+<div style={{background:"#10b98106",borderRadius:3,padding:6,marginTop:5}}><div style={{color:"#10b981",fontSize:8,fontWeight:700}}>After March 11: full evening every night.</div></div>
+<div style={{color:"#2a2a38",fontSize:7,marginTop:3}}>Tap any class → preview schedule.</div></div>)}
 
-          {/* Banner */}
-          <div style={{ background: meta.color + "08", border: `1px solid ${meta.color}14`, borderRadius: 5, padding: "7px 9px", marginBottom: 9, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 7, color: "#3a3a48", fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase" }}>{isToday ? "Today" : "Preview"}</div>
-              <div style={{ color: meta.color, fontSize: 12, fontWeight: 700 }}>{meta.label}</div>
-              <div style={{ color: "#333", fontSize: 8 }}>{shortDate(selectedDate)}</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              {dt.events && dt.events.length > 0 && dt.events.map((e, i) => (
-                <div key={i} style={{ color: meta.color, fontSize: 9, fontWeight: 700 }}>{e.icon} {e.label} {e.time}</div>
-              ))}
-              {dt.key === "sunday" && <div style={{ color: "#6366f1", fontSize: 9, fontWeight: 700 }}>🧑‍🍳 Meal Prep Day</div>}
-            </div>
-          </div>
+{tab==="metrics"&&(
+<div>{METRICS.map((m,i)=>(
+<div key={i} style={{background:"#06060a",borderRadius:3,padding:6,marginBottom:2,borderLeft:`2px solid ${m.c}`}}>
+<div style={{display:"flex",justifyContent:"space-between"}}>
+<span style={{color:"#aab",fontSize:9,fontWeight:700}}>{m.m}</span>
+<span style={{color:m.c,fontSize:8,fontWeight:700,fontFamily:"monospace",background:m.c+"08",padding:"1px 3px",borderRadius:2}}>{m.t}</span></div>
+<div style={{color:"#1e1e2a",fontSize:7}}>{m.w}</div></div>))}</div>)}
 
-          {/* Tabs */}
-          <div style={{ display: "flex", gap: 1, marginBottom: 9, background: "#06060a", borderRadius: 4, padding: 1 }}>
-            {[{ id: "schedule", l: "📅 Schedule" }, { id: "meals", l: "🍽️ Meals" }, { id: "mba", l: "🎓 MBA" }, { id: "metrics", l: "📊 Metrics" }].map((t) => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, padding: "4px 2px", borderRadius: 3, border: "none", background: tab === t.id ? "#10101e" : "transparent", color: tab === t.id ? "#aab" : "#1e1e2a", fontSize: 9, fontWeight: 600, cursor: "pointer" }}>{t.l}</button>
-            ))}
-          </div>
+</div>)}
 
-          {/* SCHEDULE */}
-          {tab === "schedule" && (
-            <div>
-              <div style={{ display: "flex", gap: 2, marginBottom: 6, justifyContent: "flex-end" }}>
-                <button onClick={() => setExp(new Set(blocks.map((b) => b.id)))} style={{ background: "none", border: "1px solid #0e0e18", borderRadius: 2, padding: "1px 4px", color: "#1a1a28", fontSize: 7, cursor: "pointer" }}>Expand</button>
-                <button onClick={() => setExp(new Set())} style={{ background: "none", border: "1px solid #0e0e18", borderRadius: 2, padding: "1px 4px", color: "#1a1a28", fontSize: 7, cursor: "pointer" }}>Collapse</button>
-              </div>
-              {blocks.map((b) => <Blk key={b.id} b={b} open={exp.has(b.id)} toggle={() => tog(b.id)} />)}
-            </div>
-          )}
-
-          {/* MEALS */}
-          {tab === "meals" && (
-            <div>
-              <div style={{ background: "#07070c", borderRadius: 4, padding: 8, marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ color: "#f59e0b", fontSize: 9, fontWeight: 700 }}>Meals — {meta.label}</div>
-                <span style={{ fontSize: 7, padding: "1px 4px", borderRadius: 2, background: meta.color + "0e", color: meta.color, fontWeight: 600 }}>{shortDate(selectedDate)}</span>
-              </div>
-              {meals.map((m, i) => (
-                <div key={i} style={{ display: "flex", gap: 5, background: "#06060a", borderRadius: 3, padding: 6, marginBottom: 2, borderLeft: `2px solid ${m.c}` }}>
-                  <div style={{ minWidth: 42, textAlign: "right", color: m.c, fontSize: 8, fontWeight: 700, fontFamily: "monospace" }}>{m.t}</div>
-                  <span style={{ fontSize: 12 }}>{m.i}</span>
-                  <span style={{ color: "#99a", fontSize: 9, fontWeight: 600 }}>{m.l}</span>
-                </div>
-              ))}
-              {dt.key === "tuesday" && <div style={{ color: "#ec4899", fontSize: 7, marginTop: 4, padding: "3px 5px", background: "#ec489906", borderRadius: 2 }}>Post-workout shifts to 4:15 PM (therapy pushes workout).</div>}
-              {dt.key === "sunday" && <div style={{ color: "#6366f1", fontSize: 7, marginTop: 4, padding: "3px 5px", background: "#6366f106", borderRadius: 2 }}>Prep class-night dinners + stock protein defaults.</div>}
-            </div>
-          )}
-
-          {/* MBA */}
-          {tab === "mba" && (
-            <div>
-              {MBA_CLASSES.map((c, i) => {
-                const cd = noonDate(c.date);
-                const diff = Math.ceil((cd - realToday) / 864e5);
-                const soon = diff >= 0 && diff <= 3;
-                const cc = c.course.startsWith("AI") ? "#f59e0b" : "#8b5cf6";
-                const sel = c.date === toLocalISO(selectedDate);
-                return (
-                  <button key={i} onClick={() => { selectDay(noonDate(c.date), detectDayType(noonDate(c.date)).key); setTab("schedule"); }}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 7px", marginBottom: 2, background: sel ? cc + "0a" : "#07070c", borderRadius: 4, border: `1px solid ${sel ? cc + "1e" : "#0c0c14"}`, opacity: diff < 0 ? 0.25 : 1, cursor: "pointer", width: "100%", textAlign: "left" }}>
-                    <div style={{ minWidth: 55 }}><div style={{ color: cc, fontSize: 8, fontWeight: 700, fontFamily: "monospace" }}>{c.date.slice(5)}</div><div style={{ color: "#1e1e2a", fontSize: 7 }}>{c.day}</div></div>
-                    <div style={{ flex: 1 }}><div style={{ color: "#aab", fontSize: 9, fontWeight: 600 }}>{c.course}</div><div style={{ color: "#2a2a38", fontSize: 7 }}>{c.time}</div></div>
-                    {diff >= 0 && <span style={{ color: soon ? cc : "#2a2a38", fontSize: 7, fontWeight: soon ? 700 : 400 }}>{soon ? "📌 " : ""}{diff}d</span>}
-                  </button>
-                );
-              })}
-              <div style={{ background: "#10b98106", borderRadius: 3, padding: 6, marginTop: 5 }}>
-                <div style={{ color: "#10b981", fontSize: 8, fontWeight: 700 }}>After March 11: full evening every night.</div>
-              </div>
-              <div style={{ color: "#2a2a38", fontSize: 7, marginTop: 3 }}>Tap any class → preview schedule.</div>
-            </div>
-          )}
-
-          {/* METRICS */}
-          {tab === "metrics" && (
-            <div>
-              {METRICS.map((m, i) => (
-                <div key={i} style={{ background: "#06060a", borderRadius: 3, padding: 6, marginBottom: 2, borderLeft: `2px solid ${m.c}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: "#aab", fontSize: 9, fontWeight: 700 }}>{m.m}</span>
-                    <span style={{ color: m.c, fontSize: 8, fontWeight: 700, fontFamily: "monospace", background: m.c + "08", padding: "1px 3px", borderRadius: 2 }}>{m.t}</span>
-                  </div>
-                  <div style={{ color: "#1e1e2a", fontSize: 7 }}>{m.w}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-  </script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
 </body>
 </html>
