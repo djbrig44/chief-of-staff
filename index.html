@@ -32,6 +32,7 @@ function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
 function minsFromTimeStr(s){const[time,ampm]=s.trim().split(" ");let[h,m]=time.split(":").map(Number);const p=(ampm||"").toUpperCase();if(p==="PM"&&h!==12)h+=12;if(p==="AM"&&h===12)h=0;return h*60+(m||0)}
 function nowMins(){const d=new Date();return d.getHours()*60+d.getMinutes()}
 
+// ── SCHEDULED EVENTS ──
 const MBA_CLASSES=[
 {date:"2026-02-12",day:"Thu",course:"Capstone",time:"5:30–7:30 PM",hours:2},
 {date:"2026-02-19",day:"Thu",course:"Capstone",time:"5:30–7:30 PM",hours:2},
@@ -41,10 +42,36 @@ const MBA_CLASSES=[
 {date:"2026-03-09",day:"Mon",course:"AI in Marketing",time:"5:30–9:30 PM",hours:4},
 {date:"2026-03-11",day:"Wed",course:"Capstone (Final)",time:"5:30–7:30 PM",hours:2}];
 
-function detectDayType(d){const iso=toLocalISO(d);const cls=MBA_CLASSES.find(c=>c.date===iso);if(cls){const isAI=cls.course.startsWith("AI");return{key:isAI?"ai":"capstone",classInfo:cls,events:[{label:cls.course,time:cls.time,icon:"🎓"}]}}const dow=d.getDay();if(dow===0)return{key:"sunday",classInfo:null,events:[]};if(dow===2)return{key:"tuesday",classInfo:null,events:[{label:"Therapy",time:"2:00 PM",icon:"🧠"}]};return{key:"normal",classInfo:null,events:[]}}
+// Add scuba weekends here as they're scheduled: {date:"2026-XX-XX"}
+const SCUBA_DATES=[];
 
-function defaultExpanded(key){if(key==="ai")return new Set(["trading","class"]);if(key==="capstone")return new Set(["trading","class"]);if(key==="tuesday")return new Set(["trading","therapy"]);if(key==="sunday")return new Set(["trading","meal_prep"]);return new Set(["trading"])}
+function isScubaDate(d){return SCUBA_DATES.some(s=>s.date===toLocalISO(d))}
 
+// ── DAY DETECTION ──
+function detectDayType(d){
+  const iso=toLocalISO(d);
+  const cls=MBA_CLASSES.find(c=>c.date===iso);
+  if(cls){const isAI=cls.course.startsWith("AI");return{key:isAI?"ai":"capstone",classInfo:cls,events:[{label:cls.course,time:cls.time,icon:"🎓"}]}}
+  const dow=d.getDay();
+  const scuba=isScubaDate(d);
+  if(dow===6)return{key:scuba?"saturday_scuba":"saturday",classInfo:null,events:scuba?[{label:"Scuba Course",time:"8:00 AM – 5:00 PM",icon:"🤿"}]:[]};
+  if(dow===0)return{key:scuba?"sunday_scuba":"sunday",classInfo:null,events:scuba?[{label:"Scuba Course",time:"8:00 AM – 5:00 PM",icon:"🤿"}]:[]};
+  if(dow===2)return{key:"tuesday",classInfo:null,events:[{label:"Therapy",time:"2:00 PM",icon:"🧠"}]};
+  return{key:"normal",classInfo:null,events:[]};
+}
+
+function defaultExpanded(key){
+  if(key==="ai")return new Set(["trading","class"]);
+  if(key==="capstone")return new Set(["trading","class"]);
+  if(key==="tuesday")return new Set(["trading","therapy"]);
+  if(key==="sunday")return new Set(["meal_prep"]);
+  if(key==="sunday_scuba")return new Set(["scuba","meal_prep_short"]);
+  if(key==="saturday_scuba")return new Set(["scuba"]);
+  if(key==="saturday")return new Set([]);
+  return new Set(["trading"]);
+}
+
+// ── WEEKDAY CORE MORNING ──
 const CORE=[
 {id:"morning",time:"6:00 AM",endTime:"6:30 AM",label:"Morning Startup",icon:"☀️",color:"#f59e0b",type:"ritual",duration:"30 min",details:["Coffee + breakfast","Pre-market brief","Trading plan + DEFAULT EXIT","Default: 10:15 AM"],meal:{time:"6:00 AM",label:"Breakfast"},adhd:"Breakfast is step 1."},
 {id:"trading",time:"6:30 AM",endTime:"10:15 AM",label:"Trading Block",icon:"📊",color:"#10b981",type:"focus",duration:"3h 45m",details:["Focus Mode: Trading","8:30 AM — protein snack at desk","Countdown at 9:45 AM","10:15 AM: leave the room"],meal:{time:"8:30 AM",label:"Protein Snack",reminder:"Protein now. You are trading — fuel the brain.",defaults:["Bar","Yogurt","Shake","Eggs"],rule:"At desk. Fuel, not a break."},adhd:"External cues + forced exit.",escalation:[{time:"9:45 AM",level:"Awareness",action:"30-min countdown",icon:"👁️"},{time:"10:05 AM",level:"Nudge",action:"'Exit in 10.'",icon:"🔔"},{time:"10:15 AM",level:"Force",action:"Leave room.",icon:"🚪"},{time:"10:20 AM",level:"Force",action:"Log override.",icon:"⚠️"}],override:{label:"Volatile Market Override",rules:["Declare by 10:05 AM","Max +90 min","Hard cap 11:00 AM","Max 2/week"]}},
@@ -52,6 +79,7 @@ const CORE=[
 {id:"meriwick_light",time:"11:00 AM",endTime:"11:45 AM",label:"Meriwick — Light Work",icon:"🎵",color:"#8b5cf680",type:"focus",duration:"45 min",details:["Emails, follow-ups, scheduling","Clear decks for deep work"],adhd:"Warmup only."},
 {id:"lunch",time:"11:45 AM",endTime:"12:15 PM",label:"Lunch",icon:"🍽️",color:"#f59e0b",type:"ritual",duration:"30 min",details:["Persistent alarm","In hands by 12:15 PM","Backup if not ready","Digest while eating"],meal:{time:"11:45 AM",label:"Lunch",reminder:"Lunch. Eat now before momentum steals it.",rule:"By 12:15 PM. No 'later.'"},adhd:"Before deep work."}];
 
+// ── WEEKDAY AFTERNOONS ──
 const AFT_NORMAL=[
 {id:"meriwick_deep",time:"12:15 PM",endTime:"2:15 PM",label:"Meriwick — Deep Work",icon:"🎵",color:"#8b5cf6",type:"focus",duration:"2 hrs",details:["Meriwick Focus Mode","Nap window = quiet","SIA, reports, strategy"],adhd:"Best environment.",escalation:[{time:"2:00 PM",level:"Awareness",action:"15-min countdown",icon:"👁️"},{time:"2:15 PM",level:"Force",action:"'Gym now.'",icon:"🚪"}]},
 {id:"workout",time:"2:15 PM",endTime:"3:45 PM",label:"Workout + Recovery (60+30)",icon:"🏋️",color:"#6366f1",type:"transition",duration:"90 min",details:["Home gym","60-min workout","30-min shower + protein","Phone away"],meal:{time:"3:30 PM",label:"Post-Workout",defaults:["Shake","Bar","Eggs"]},adhd:"Physical transition + energy reset."},
@@ -65,13 +93,7 @@ const AFT_TUESDAY=[
 {id:"flex",time:"4:30 PM",endTime:"5:00 PM",label:"Flex (Short)",icon:"🔄",color:"#64748b",type:"flex",duration:"30 min",details:["ONE loop to close","Trading prep OR Meriwick admin"],adhd:"Shorter = tighter. One task."},
 {id:"shutdown",time:"5:00 PM",endTime:"5:30 PM",label:"Shutdown Ritual",icon:"📋",color:"#6366f1",type:"transition",duration:"30 min",details:["Open loops","Tomorrow's top 3","DINNER DECISION","Execute by 5:30 PM"],meal:{time:"5:00 PM",label:"Dinner Decision",reminder:"Cooking or ordering? NOW.",rule:"By 5:30 PM."},adhd:"30 min later on Tuesdays."}];
 
-const AFT_SUNDAY=[
-{id:"meriwick_deep",time:"12:15 PM",endTime:"1:00 PM",label:"Meriwick — Light Review",icon:"🎵",color:"#8b5cf680",type:"focus",duration:"45 min",details:["Quick SIA scan","Flag anything for Monday","NOT deep work"],adhd:"Scan, flag, move on."},
-{id:"meal_prep",time:"1:00 PM",endTime:"2:30 PM",label:"Meal Prep + Week Setup",icon:"🧑‍🍳",color:"#6366f1",type:"ritual",duration:"90 min",details:["Prep class-night dinners","Prep protein snack defaults","Prep lunch defaults (optional)","Stock check","Confirm week schedule"],meal:{time:"1:00 PM",label:"Meal Prep Block"},adhd:"Keystone block. Skip → class nights collapse."},
-{id:"walk",time:"2:30 PM",endTime:"3:30 PM",label:"Walk / Mobility",icon:"🚶",color:"#6366f1",type:"transition",duration:"60 min",details:["Low-friction movement","Active recovery","No screens"],adhd:"Recovery, not performance."},
-{id:"flex_sun",time:"3:30 PM",endTime:"4:30 PM",label:"Flex (Week Planning)",icon:"🔄",color:"#64748b",type:"flex",duration:"60 min",details:["Plan the week","Light admin","Address avoidance pile"],adhd:"Handle what you've been avoiding."},
-{id:"shutdown",time:"4:30 PM",endTime:"5:00 PM",label:"Shutdown Ritual",icon:"📋",color:"#6366f1",type:"transition",duration:"30 min",details:["Capture open loops","Week priorities","DINNER DECISION"],meal:{time:"4:30 PM",label:"Dinner Decision",reminder:"Cooking or ordering? NOW.",rule:"By 5:00 PM."},adhd:"Sunday shutdown sets the week."}];
-
+// ── WEEKDAY EVENINGS ──
 const EVE_NORMAL=[
 {id:"dinner",time:"5:30 PM",endTime:"6:15 PM",label:"Dinner",icon:"🍳",color:"#f59e0b",type:"ritual",duration:"45 min",details:["Cook + eat or delivery","No work screens"],meal:{time:"5:30 PM",label:"Dinner"},adhd:"Appointment, not hope."},
 {id:"evening",time:"6:15 PM",endTime:"10:00 PM",label:"Screens Down — Personal",icon:"💛",color:"#fbbf24",type:"protected",duration:"3h 45m",details:["Focus: Personal","Wife time","NO work"],adhd:"Relationship boundary.",escalation:[{time:"6:15 PM",level:"Force",action:"Personal mode. Work locked.",icon:"🔒"}]}];
@@ -88,9 +110,51 @@ const EVE_AI=[
 {id:"dinner_post",time:"9:45 PM",endTime:"10:15 PM",label:"Dinner (Pre-prepped)",icon:"🍳",color:"#f59e0b",type:"ritual",duration:"30 min",details:["Heat from Sunday"],meal:{time:"9:45 PM",label:"Dinner (Pre-prepped)",rule:"Not prepped? Order."},adhd:"Late. Eat what's made."},
 {id:"wind",time:"10:15 PM",endTime:"10:45 PM",label:"Wind Down → Sleep",icon:"🌙",color:"#64748b",type:"protected",duration:"30 min",details:["No catch-up"],adhd:"Don't 'make up' the evening."}];
 
-function getAft(k){return k==="tuesday"?AFT_TUESDAY:k==="sunday"?AFT_SUNDAY:AFT_NORMAL}
-function getEve(k){return k==="ai"?EVE_AI:k==="capstone"?EVE_CAP:EVE_NORMAL}
-function getBlocks(k){return[...CORE,...getAft(k),...getEve(k)]}
+// ── SATURDAY — NORMAL (open + meal anchors) ──
+const SAT_NORMAL=[
+{id:"sat_breakfast",time:"8:00 AM",endTime:"9:00 AM",label:"Breakfast",icon:"☀️",color:"#f59e0b",type:"ritual",duration:"1 hr",details:["No rush","Coffee + real meal","No work screens"],meal:{time:"8:00 AM",label:"Breakfast"},adhd:"Eat before the day scatters."},
+{id:"sat_open_am",time:"9:00 AM",endTime:"12:00 PM",label:"Open — Morning",icon:"🏖️",color:"#64748b",type:"flex",duration:"3 hrs",details:["Errands, family, personal projects","House stuff","No obligations"],adhd:"Unstructured is the point."},
+{id:"sat_lunch",time:"12:00 PM",endTime:"12:45 PM",label:"Lunch",icon:"🍽️",color:"#f59e0b",type:"ritual",duration:"45 min",details:["Eat something real","Don't skip because you're 'not hungry yet'"],meal:{time:"12:00 PM",label:"Lunch",reminder:"Saturday lunch. Eat now."},adhd:"Weekend skipping = Monday crash."},
+{id:"sat_open_pm",time:"12:45 PM",endTime:"5:30 PM",label:"Open — Afternoon",icon:"🏖️",color:"#64748b",type:"flex",duration:"4h 45m",details:["Family time, errands, rest","Gym if you want (optional)","No work pressure"],adhd:"Recharge, don't optimize."},
+{id:"sat_dinner",time:"5:30 PM",endTime:"6:15 PM",label:"Dinner",icon:"🍳",color:"#f59e0b",type:"ritual",duration:"45 min",details:["Cook or go out","Date night?"],meal:{time:"5:30 PM",label:"Dinner"},adhd:"Eat with your wife."},
+{id:"sat_evening",time:"6:15 PM",endTime:"10:00 PM",label:"Personal Evening",icon:"💛",color:"#fbbf24",type:"protected",duration:"3h 45m",details:["Fully off","No work","No trading prep"],adhd:"Saturdays are yours."}];
+
+// ── SUNDAY — NORMAL (prep day + open) ──
+const SUN_NORMAL=[
+{id:"sun_breakfast",time:"8:00 AM",endTime:"9:00 AM",label:"Breakfast",icon:"☀️",color:"#f59e0b",type:"ritual",duration:"1 hr",details:["No rush","Coffee + meal"],meal:{time:"8:00 AM",label:"Breakfast"},adhd:"Fuel before prep."},
+{id:"sun_open_am",time:"9:00 AM",endTime:"12:00 PM",label:"Open — Morning",icon:"🏖️",color:"#64748b",type:"flex",duration:"3 hrs",details:["Light Meriwick or trading prep (optional)","Errands","Personal time"],adhd:"Optional work only. Don't force it."},
+{id:"sun_lunch",time:"12:00 PM",endTime:"12:45 PM",label:"Lunch",icon:"🍽️",color:"#f59e0b",type:"ritual",duration:"45 min",details:["Eat before prep block","Don't push lunch to 'after prep'"],meal:{time:"12:00 PM",label:"Lunch",reminder:"Lunch. Eat before prep starts."},adhd:"Prep on empty stomach = bail."},
+{id:"meal_prep",time:"1:00 PM",endTime:"2:30 PM",label:"Meal Prep + Week Setup",icon:"🧑‍🍳",color:"#6366f1",type:"ritual",duration:"90 min",details:["Prep class-night dinners","Prep protein snack defaults","Prep lunch defaults (optional)","Stock check","Confirm week schedule"],meal:{time:"1:00 PM",label:"Meal Prep Block"},adhd:"Keystone block. Skip → class nights collapse."},
+{id:"sun_open_pm",time:"2:30 PM",endTime:"4:30 PM",label:"Open — Afternoon",icon:"🏖️",color:"#64748b",type:"flex",duration:"2 hrs",details:["Week planning (light)","Rest","Walk / mobility"],adhd:"Prep is done. Breathe."},
+{id:"sun_shutdown",time:"4:30 PM",endTime:"5:00 PM",label:"Week Preview",icon:"📋",color:"#6366f1",type:"transition",duration:"30 min",details:["Check upcoming day types","Flag scuba / class nights","Set Monday's top 3"],adhd:"5 min that saves 5 hours."},
+{id:"sun_dinner",time:"5:30 PM",endTime:"6:15 PM",label:"Dinner",icon:"🍳",color:"#f59e0b",type:"ritual",duration:"45 min",details:["Cook or order","Wind into evening"],meal:{time:"5:30 PM",label:"Dinner"},adhd:"Sunday dinner = reset."},
+{id:"sun_evening",time:"6:15 PM",endTime:"10:00 PM",label:"Personal Evening",icon:"💛",color:"#fbbf24",type:"protected",duration:"3h 45m",details:["Fully off","Prep is done","Recharge for Monday"],adhd:"You earned this."}];
+
+// ── SATURDAY — SCUBA ──
+const SAT_SCUBA=[
+{id:"scuba_breakfast",time:"6:30 AM",endTime:"7:30 AM",label:"Breakfast (Early)",icon:"☀️",color:"#f59e0b",type:"ritual",duration:"1 hr",details:["Eat well — long physical day ahead","Hydrate"],meal:{time:"6:30 AM",label:"Breakfast",reminder:"Big day. Eat now."},adhd:"Can't teach on empty."},
+{id:"scuba",time:"8:00 AM",endTime:"5:00 PM",label:"Scuba Course — Teaching",icon:"🤿",color:"#0ea5e9",type:"focus",duration:"9 hrs",details:["Full day course","Lunch break built in","Stay hydrated"],meal:{time:"12:00 PM",label:"Lunch (Mid-Course)",reminder:"Lunch break. Eat.",rule:"Don't skip."},adhd:"Committed. System pauses."},
+{id:"scuba_dinner",time:"5:30 PM",endTime:"6:15 PM",label:"Dinner",icon:"🍳",color:"#f59e0b",type:"ritual",duration:"45 min",details:["You're exhausted","Easy meal or order"],meal:{time:"5:30 PM",label:"Dinner"},adhd:"Eat. Don't collapse on the couch first."},
+{id:"scuba_eve",time:"6:15 PM",endTime:"10:00 PM",label:"Recovery Evening",icon:"💛",color:"#fbbf24",type:"protected",duration:"3h 45m",details:["Rest","No work","Recover for Sunday course"],adhd:"Tomorrow is another full day."}];
+
+// ── SUNDAY — SCUBA ──
+const SUN_SCUBA=[
+{id:"scuba_breakfast",time:"6:30 AM",endTime:"7:30 AM",label:"Breakfast (Early)",icon:"☀️",color:"#f59e0b",type:"ritual",duration:"1 hr",details:["Eat well — day 2","Hydrate"],meal:{time:"6:30 AM",label:"Breakfast",reminder:"Day 2. Fuel up."},adhd:"Tired from yesterday. Eat anyway."},
+{id:"scuba",time:"8:00 AM",endTime:"5:00 PM",label:"Scuba Course — Teaching",icon:"🤿",color:"#0ea5e9",type:"focus",duration:"9 hrs",details:["Full day course","Lunch break built in","Last push"],meal:{time:"12:00 PM",label:"Lunch (Mid-Course)",reminder:"Lunch break. Eat.",rule:"Don't skip."},adhd:"Finish strong."},
+{id:"meal_prep_short",time:"5:30 PM",endTime:"6:30 PM",label:"Meal Prep (Compressed)",icon:"🧑‍🍳",color:"#6366f1",type:"ritual",duration:"60 min",details:["Shorter than normal — you're wiped","Focus on class-night dinners only","Stock check protein defaults","Skip anything optional"],meal:{time:"5:30 PM",label:"Meal Prep (Short)"},adhd:"60 min. Not 90. Just the essentials."},
+{id:"scuba_dinner",time:"6:45 PM",endTime:"7:30 PM",label:"Dinner",icon:"🍳",color:"#f59e0b",type:"ritual",duration:"45 min",details:["Late but necessary","Order if you're toast"],meal:{time:"6:45 PM",label:"Dinner",reminder:"You taught all weekend. Eat.",rule:"Order if needed."},adhd:"Don't skip. Monday is a full day."},
+{id:"scuba_eve",time:"7:30 PM",endTime:"10:00 PM",label:"Recovery Evening",icon:"💛",color:"#fbbf24",type:"protected",duration:"2h 30m",details:["Shorter evening — late dinner","Rest hard","Monday is coming"],adhd:"Sleep > everything tonight."}];
+
+// ── ASSEMBLY ──
+function getBlocks(k){
+  if(k==="saturday")return SAT_NORMAL;
+  if(k==="sunday")return SUN_NORMAL;
+  if(k==="saturday_scuba")return SAT_SCUBA;
+  if(k==="sunday_scuba")return SUN_SCUBA;
+  const aft=k==="tuesday"?AFT_TUESDAY:AFT_NORMAL;
+  const eve=k==="ai"?EVE_AI:k==="capstone"?EVE_CAP:EVE_NORMAL;
+  return[...CORE,...aft,...eve];
+}
 
 const METRICS=[
 {m:"Trading overrides",t:"≤ 2/wk",w:">2 → adjust cutoff",c:"#10b981"},
@@ -105,11 +169,14 @@ const METRICS=[
 {m:"Evening work",t:"0/wk",w:"Any = leak",c:"#ef4444"}];
 
 const DAY_META={
-normal:{label:"Normal Day",sub:"Mon, Wed, Fri, Sat",color:"#10b981",icon:"📅"},
+normal:{label:"Normal Day",sub:"Mon, Wed, Thu, Fri",color:"#10b981",icon:"📅"},
 tuesday:{label:"Tuesday (Therapy)",sub:"Therapy 2 PM · Workout → 3 PM",color:"#ec4899",icon:"🧠"},
 capstone:{label:"Capstone Night",sub:"Class 5:30–7:30 PM",color:"#8b5cf6",icon:"🎓"},
 ai:{label:"AI in Marketing",sub:"Class 5:30–9:30 PM",color:"#f59e0b",icon:"🎓"},
-sunday:{label:"Sunday (Prep)",sub:"Meal prep + plan week",color:"#6366f1",icon:"🧑‍🍳"}};
+saturday:{label:"Saturday",sub:"Open · Meals anchored",color:"#64748b",icon:"🏖️"},
+sunday:{label:"Sunday (Prep)",sub:"Meal prep + week setup",color:"#6366f1",icon:"🧑‍🍳"},
+saturday_scuba:{label:"Saturday (Scuba)",sub:"Teaching 8 AM – 5 PM",color:"#0ea5e9",icon:"🤿"},
+sunday_scuba:{label:"Sunday (Scuba)",sub:"Teaching + compressed prep",color:"#0ea5e9",icon:"🤿"}};
 
 function getPreviewDates(anchor){const dates=[];for(let i=0;i<14;i++){const d=addDays(anchor,i);dates.push({date:d,dt:detectDayType(d)})}return dates}
 
@@ -203,7 +270,8 @@ return(
 <div style={{color:"#333",fontSize:8}}>{shortDate(selectedDate)}</div></div>
 <div style={{textAlign:"right"}}>
 {dt.events&&dt.events.length>0&&dt.events.map((e,i)=>(<div key={i} style={{color:meta.color,fontSize:9,fontWeight:700}}>{e.icon} {e.label} {e.time}</div>))}
-{dt.key==="sunday"&&<div style={{color:"#6366f1",fontSize:9,fontWeight:700}}>🧑‍🍳 Meal Prep Day</div>}</div></div>
+{dt.key==="sunday"&&<div style={{color:"#6366f1",fontSize:9,fontWeight:700}}>🧑‍🍳 Meal Prep Day</div>}
+{dt.key==="sunday_scuba"&&<div style={{color:"#6366f1",fontSize:9,fontWeight:700}}>🧑‍🍳 Compressed Prep</div>}</div></div>
 
 {isToday&&(active||next)&&(
 <div style={{background:"#07070c",border:"1px solid #0c0c14",borderRadius:6,padding:"8px 9px",marginBottom:9}}>
@@ -248,6 +316,8 @@ return(
 <div key={i} style={{display:"flex",gap:5,background:"#06060a",borderRadius:3,padding:6,marginBottom:2,borderLeft:`2px solid ${m.c}`}}>
 <div style={{minWidth:50,textAlign:"right",color:m.c,fontSize:8,fontWeight:700,fontFamily:"monospace"}}>{m.t}</div>
 <span style={{color:"#99a",fontSize:9,fontWeight:600}}>{m.l}</span></div>))}
+{(dt.key==="sunday_scuba")&&<div style={{color:"#0ea5e9",fontSize:7,marginTop:4,padding:"3px 5px",background:"#0ea5e906",borderRadius:2}}>Scuba day — compressed 60-min prep after course.</div>}
+{(dt.key==="saturday_scuba")&&<div style={{color:"#0ea5e9",fontSize:7,marginTop:4,padding:"3px 5px",background:"#0ea5e906",borderRadius:2}}>Scuba day — lunch during course break.</div>}
 {dt.key==="tuesday"&&<div style={{color:"#ec4899",fontSize:7,marginTop:4,padding:"3px 5px",background:"#ec489906",borderRadius:2}}>Post-workout shifts to 4:15 PM (therapy pushes workout).</div>}
 {dt.key==="sunday"&&<div style={{color:"#6366f1",fontSize:7,marginTop:4,padding:"3px 5px",background:"#6366f106",borderRadius:2}}>Prep class-night dinners + stock protein defaults.</div>}</div>)}
 
